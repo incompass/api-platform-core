@@ -71,33 +71,21 @@ final class ApiLoader extends Loader
     public function load($data, $type = null): RouteCollection
     {
         $routeCollection = new RouteCollection();
-        foreach ($this->resourceClassDirectories as $directory) {
-            $routeCollection->addResource(new DirectoryResource($directory, '/\.php$/'));
-        }
 
-        $this->loadExternalFiles($routeCollection);
+        $resourceNameCollection = $this->resourceNameCollectionFactory->create();
 
-        foreach ($this->resourceNameCollectionFactory->create() as $resourceClass) {
-            $resourceMetadata = $this->resourceMetadataFactory->create($resourceClass);
-            $resourceShortName = $resourceMetadata->getShortName();
-
-            if (null === $resourceShortName) {
-                throw new InvalidResourceException(sprintf('Resource %s has no short name defined.', $resourceClass));
+        if (is_string($data) && class_exists($data) && !in_array($data, iterator_to_array($resourceNameCollection))) {
+            $this->addResource($routeCollection, $data);
+        } else {
+            foreach ($this->resourceClassDirectories as $directory) {
+                $routeCollection->addResource(new DirectoryResource($directory, '/\.php$/'));
             }
 
-            if (null !== $collectionOperations = $resourceMetadata->getCollectionOperations()) {
-                foreach ($collectionOperations as $operationName => $operation) {
-                    $this->addRoute($routeCollection, $resourceClass, $operationName, $operation, $resourceShortName, OperationType::COLLECTION);
-                }
-            }
+            $this->loadExternalFiles($routeCollection);
 
-            if (null !== $itemOperations = $resourceMetadata->getItemOperations()) {
-                foreach ($itemOperations as $operationName => $operation) {
-                    $this->addRoute($routeCollection, $resourceClass, $operationName, $operation, $resourceShortName, OperationType::ITEM);
-                }
+            foreach ($this->resourceNameCollectionFactory->create() as $resourceClass) {
+                $this->addResource($routeCollection, $resourceClass);
             }
-
-            $this->computeSubresourceOperations($routeCollection, $resourceClass);
         }
 
         return $routeCollection;
@@ -281,5 +269,29 @@ final class ApiLoader extends Loader
         );
 
         $routeCollection->add($routeName, $route);
+    }
+
+    private function addResource(RouteCollection $routeCollection, string $resourceClass)
+    {
+        $resourceMetadata = $this->resourceMetadataFactory->create($resourceClass);
+        $resourceShortName = $resourceMetadata->getShortName();
+
+        if (null === $resourceShortName) {
+            throw new InvalidResourceException(sprintf('Resource %s has no short name defined.', $resourceClass));
+        }
+
+        if (null !== $collectionOperations = $resourceMetadata->getCollectionOperations()) {
+            foreach ($collectionOperations as $operationName => $operation) {
+                $this->addRoute($routeCollection, $resourceClass, $operationName, $operation, $resourceShortName, OperationType::COLLECTION);
+            }
+        }
+
+        if (null !== $itemOperations = $resourceMetadata->getItemOperations()) {
+            foreach ($itemOperations as $operationName => $operation) {
+                $this->addRoute($routeCollection, $resourceClass, $operationName, $operation, $resourceShortName, OperationType::ITEM);
+            }
+        }
+
+        $this->computeSubresourceOperations($routeCollection, $resourceClass);
     }
 }

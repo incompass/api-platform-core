@@ -38,6 +38,61 @@ use Symfony\Component\Routing\Route;
  */
 class ApiLoaderTest extends \PHPUnit_Framework_TestCase
 {
+    public function testApiLoaderWithResourceClass()
+    {
+        $resourceMetadata = new ResourceMetadata();
+        $resourceMetadata = $resourceMetadata->withShortName('dummy');
+        //default operation based on OperationResourceMetadataFactory
+        $resourceMetadata = $resourceMetadata->withItemOperations([
+            'get' => ['method' => 'GET'],
+            'put' => ['method' => 'PUT'],
+            'delete' => ['method' => 'DELETE'],
+        ]);
+        //custom operations
+        $resourceMetadata = $resourceMetadata->withCollectionOperations([
+            'my_op' => ['method' => 'GET', 'controller' => 'some.service.name'], //with controller
+            'my_second_op' => ['method' => 'POST'], //without controller, takes the default one
+            'my_path_op' => ['method' => 'GET', 'path' => 'some/custom/path'], //custom path
+        ]);
+
+        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load(DummyEntity::class);
+
+        $this->assertEquals(
+            $this->getRoute('/dummies/{id}.{_format}', 'api_platform.action.get_item', DummyEntity::class, 'get', ['GET']),
+            $routeCollection->get('api_dummies_get_item')
+        );
+
+        $this->assertEquals(
+            $this->getRoute('/dummies/{id}.{_format}', 'api_platform.action.delete_item', DummyEntity::class, 'delete', ['DELETE']),
+            $routeCollection->get('api_dummies_delete_item')
+        );
+
+        $this->assertEquals(
+            $this->getRoute('/dummies/{id}.{_format}', 'api_platform.action.put_item', DummyEntity::class, 'put', ['PUT']),
+            $routeCollection->get('api_dummies_put_item')
+        );
+
+        $this->assertEquals(
+            $this->getRoute('/dummies.{_format}', 'some.service.name', DummyEntity::class, 'my_op', ['GET'], true),
+            $routeCollection->get('api_dummies_my_op_collection')
+        );
+
+        $this->assertEquals(
+            $this->getRoute('/dummies.{_format}', 'api_platform.action.post_collection', DummyEntity::class, 'my_second_op', ['POST'], true),
+            $routeCollection->get('api_dummies_my_second_op_collection')
+        );
+
+        $this->assertEquals(
+            $this->getRoute('/some/custom/path', 'api_platform.action.get_collection', DummyEntity::class, 'my_path_op', ['GET'], true),
+            $routeCollection->get('api_dummies_my_path_op_collection')
+        );
+
+        $this->assertEquals(
+            $this->getSubresourceRoute('/dummies/{id}/subresources.{_format}', 'api_platform.action.get_subresource', RelatedDummyEntity::class, 'api_dummies_subresources_get_subresource', ['property' => 'subresource', 'identifiers' => [['id', DummyEntity::class]], 'collection' => true]),
+            $routeCollection->get('api_dummies_subresources_get_subresource')
+        );
+    }
+
     public function testApiLoader()
     {
         $resourceMetadata = new ResourceMetadata();
@@ -55,7 +110,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
             'my_path_op' => ['method' => 'GET', 'path' => 'some/custom/path'], //custom path
         ]);
 
-        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load(null);
+        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata, [DummyEntity::class, RelatedDummyEntity::class])->load(null);
 
         $this->assertEquals(
             $this->getRoute('/dummies/{id}.{_format}', 'api_platform.action.get_item', DummyEntity::class, 'get', ['GET']),
@@ -109,7 +164,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
             'get' => ['method' => 'GET'],
         ]);
 
-        $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load(null);
+        $this->getApiLoaderWithResourceMetadata($resourceMetadata, [DummyEntity::class, RelatedDummyEntity::class])->load(null);
     }
 
     /**
@@ -128,7 +183,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
             'get' => ['method' => 'GET'],
         ]);
 
-        $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load(null);
+        $this->getApiLoaderWithResourceMetadata($resourceMetadata, [DummyEntity::class, RelatedDummyEntity::class])->load(null);
     }
 
     /**
@@ -136,7 +191,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
      */
     public function testNoShortNameApiLoader()
     {
-        $this->getApiLoaderWithResourceMetadata(new ResourceMetadata())->load(null);
+        $this->getApiLoaderWithResourceMetadata(new ResourceMetadata(), [DummyEntity::class, RelatedDummyEntity::class])->load(null);
     }
 
     public function testRecursiveSubresource()
@@ -154,7 +209,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
             'my_path_op' => ['method' => 'GET', 'path' => 'some/custom/path'], //custom path
         ]);
 
-        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata, true)->load(null);
+        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata, [DummyEntity::class, RelatedDummyEntity::class], true)->load(null);
 
         $this->assertEquals(
             $this->getSubresourceRoute('/dummies/{id}/subresources.{_format}', 'api_platform.action.get_subresource', RelatedDummyEntity::class, 'api_dummies_subresources_get_subresource', ['property' => 'subresource', 'identifiers' => [['id', DummyEntity::class]], 'collection' => true]),
@@ -187,7 +242,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
         );
     }
 
-    private function getApiLoaderWithResourceMetadata(ResourceMetadata $resourceMetadata, $recursiveSubresource = false): ApiLoader
+    private function getApiLoaderWithResourceMetadata(ResourceMetadata $resourceMetadata, $classes = [], $recursiveSubresource = false): ApiLoader
     {
         $routingConfig = __DIR__.'/../../../../src/Bridge/Symfony/Bundle/Resources/config/routing';
 
@@ -214,7 +269,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
         $resourceMetadataFactoryProphecy->create(RelatedDummyEntity::class)->willReturn((new ResourceMetadata())->withShortName('related_dummies'));
 
         $resourceNameCollectionFactoryProphecy = $this->prophesize(ResourceNameCollectionFactoryInterface::class);
-        $resourceNameCollectionFactoryProphecy->create()->willReturn(new ResourceNameCollection([DummyEntity::class, RelatedDummyEntity::class]));
+        $resourceNameCollectionFactoryProphecy->create()->willReturn(new ResourceNameCollection($classes));
 
         $propertyNameCollectionFactoryProphecy = $this->prophesize(PropertyNameCollectionFactoryInterface::class);
         $propertyNameCollectionFactoryProphecy->create(DummyEntity::class)->willReturn(new PropertyNameCollection(['id', 'subresource']));

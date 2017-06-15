@@ -55,7 +55,7 @@ class ApiLoaderTest extends \PHPUnit_Framework_TestCase
             'my_path_op' => ['method' => 'GET', 'path' => 'some/custom/path'], //custom path
         ]);
 
-        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load(DummyEntity::class);
+        $routeCollection = $this->getApiLoaderWithResourceMetadata($resourceMetadata)->load([DummyEntity::class => $resourceMetadata]);
 
         $this->assertEquals(
             $this->getRoute('/dummies/{id}.{_format}', 'api_platform.action.get_item', DummyEntity::class, 'get', ['GET']),

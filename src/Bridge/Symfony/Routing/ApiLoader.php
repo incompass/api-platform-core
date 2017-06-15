@@ -20,6 +20,7 @@ use ApiPlatform\Core\Metadata\Property\Factory\PropertyMetadataFactoryInterface;
 use ApiPlatform\Core\Metadata\Property\Factory\PropertyNameCollectionFactoryInterface;
 use ApiPlatform\Core\Metadata\Resource\Factory\ResourceMetadataFactoryInterface;
 use ApiPlatform\Core\Metadata\Resource\Factory\ResourceNameCollectionFactoryInterface;
+use ApiPlatform\Core\Metadata\Resource\ResourceMetadata;
 use ApiPlatform\Core\PathResolver\OperationPathResolverInterface;
 use Doctrine\Common\Inflector\Inflector;
 use Symfony\Component\Config\FileLocator;
@@ -72,10 +73,10 @@ final class ApiLoader extends Loader
     {
         $routeCollection = new RouteCollection();
 
-        $resourceNameCollection = $this->resourceNameCollectionFactory->create();
-
-        if (is_string($data) && class_exists($data) && !in_array($data, iterator_to_array($resourceNameCollection))) {
-            $this->addResource($routeCollection, $data);
+        if (is_array($data)) {
+            foreach ($data as $class => $metadata) {
+                $this->addResource($routeCollection, $class, $metadata);
+            }
         } else {
             foreach ($this->resourceClassDirectories as $directory) {
                 $routeCollection->addResource(new DirectoryResource($directory, '/\.php$/'));
@@ -271,9 +272,9 @@ final class ApiLoader extends Loader
         $routeCollection->add($routeName, $route);
     }
 
-    private function addResource(RouteCollection $routeCollection, string $resourceClass)
+    private function addResource(RouteCollection $routeCollection, string $resourceClass, ResourceMetadata $resourceMetadata = null)
     {
-        $resourceMetadata = $this->resourceMetadataFactory->create($resourceClass);
+        $resourceMetadata = $resourceMetadata ?: $this->resourceMetadataFactory->create($resourceClass);
         $resourceShortName = $resourceMetadata->getShortName();
 
         if (null === $resourceShortName) {
